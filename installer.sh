@@ -271,7 +271,7 @@ mount_in_tmpdir_or_die() {
 
 	mount "$1" "$tmp" || {
 		ret="$?"
-		printf "\e[1;31mFATAL ERROR: Failed to mount "$1"\e[0m\n"
+		printf "\e[1;31mFATAL ERROR: Failed to mount $1\e[0m\n"
 		[ -d "$tmp" ] && rmdir "$tmp" || true
 
 		bug_report "Step: mount_in_tmpdir__do_mnt" "Return code: $ret" "To be mounted: $1" "TempDir: $tmp"
@@ -320,7 +320,7 @@ do_configure() {
 		read -r yesno
 		case "$yesno" in
 			y|Y|yes|YES|"") copy_nm=true ;;
-			n|n|no|NO) copy_nm=false ;;
+			n|N|no|NO) copy_nm=false ;;
 			*) printf "\e[1;31mInvalid answer!  Please try again.\e[0m\n"; continue ;;
 		esac
 		break
@@ -335,7 +335,7 @@ do_configure() {
 		read -r yesno
 		case "$yesno" in
 			y|Y|yes|YES|"") ssh=true ;;
-			n|n|no|NO) ssh=false ;;
+			n|N|no|NO) ssh=false ;;
 			*) printf "\e[1;31mInvalid answer!  Please try again.\e[0m\n"; continue ;;
 		esac
 		break
@@ -480,7 +480,7 @@ if [ "$seperate_sd_and_rootfs" = "false" ]; then
 		read -r doauto
 		case "$doauto" in
 			a|A|auto|Auto|AUTO|automatic|Automatic|AUTOMATIC) automatic_install ;;
-			m|m|man|Man|MAN|manual|Manual|MANUAL) manual_install ;;
+			m|M|man|Man|MAN|manual|Manual|MANUAL) manual_install ;;
 			*) printf "\e[1;31mInvalid option, please try again\e[0m\n"; continue ;;
 		esac
 		break
