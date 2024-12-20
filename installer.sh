@@ -434,6 +434,11 @@ p
 
 w
 EOF
+
+	echo "Giving the kernel a few seconds to populate the partition table"
+	sync
+	sleep 3
+
 	echo "Fomatting..."
 	# set up a loop device so we get a consistent partition scheme of /dev/loopXp#
 	loopdev="$(losetup --direct-io=on --show -P -f "/dev/$sd_blkdev")" && [ "$loopdev" != "" ] || {
