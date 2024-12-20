@@ -327,7 +327,10 @@ do_configure() {
 	done
 
 	if [ "$copy_nm" = "true" ]; then
-		cp -a /etc/NetworkManager/system-connections/* "$rootfs_mnt/etc/NetworkManager/system-connections/"
+		if [ -d /etc/NetworkManager/system-connections ] &&
+		! [ -z "$(ls -A /etc/NetworkManager/system-connections)" ]; then
+			cp -a /etc/NetworkManager/system-connections/* "$rootfs_mnt/etc/NetworkManager/system-connections/"
+		fi
 	fi
 
 	while true; do
