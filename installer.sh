@@ -223,8 +223,8 @@ validate_and_select_part() {
 select_root_disk() {
 	while true; do
 		printf "\e[33mYou can store \e[32mthe rootfs\e[33m (the actual system files and user data) on a different device.\n"
-		printf "This will, however, disable the auto-partitioning feature of this script.  Would you like to store\n"
-		printf "the boot files and rootfs on seperate devices?\e[0m [y/N] "
+		printf "This will, however, is highly experimental, and will disable the auto-partitioning feature of this script.\n"
+		printf "Would you like to store the boot files and rootfs on seperate devices?\e[0m [y/N] "
 		read -r yesno
 		case "$yesno" in
 			y|Y|yes|YES) seperate_sd_and_rootfs=true; break ;;
