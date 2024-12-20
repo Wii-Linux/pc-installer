@@ -438,11 +438,6 @@ p
 w
 EOF
 
-	echo "Giving the kernel a few seconds to populate the partition table"
-	sync
-	sleep 3
-
-	echo "Fomatting..."
 	# set up a loop device so we get a consistent partition scheme of /dev/loopXp#
 	loopdev="$(losetup --direct-io=on --show -P -f "/dev/$sd_blkdev")" && [ "$loopdev" != "" ] || {
 		ret="$?"
@@ -450,9 +445,14 @@ EOF
 		bug_report "Step: loopdev_create" "Return code: $ret"
 	}
 
+	echo "Giving the kernel a few seconds to populate the partition table"
+	sync
+	sleep 3
+
 	boot_blkdev="${loopdev}p1"
 	rootfs_blkdev="${loopdev}p2"
 
+	echo "Fomatting..."
 	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
 		printf "\e[1;31mFailed to format loopdev!\e[0m\n"
