@@ -195,26 +195,25 @@ validate_part_selection() {
 
 validate_and_select_part() {
 	while true; do
-		select_part "$1"
-		ret=$?
-		case "$ret" in
-			0) ;;
-			1) printf "\e[1;31mInvalid option, please try again\e[0m\n"; continue ;;
-			*)
-				printf "\e[1;31mInternal error.  Please report the following info.\e[0m\n"
-				bug_report "Step: select_part" "Return code: $ret" ;;
-		esac
+		select_part "$1" || {
+			case "$?" in
+				1) printf "\e[1;31mInvalid option, please try again\e[0m\n"; continue ;;
+				*)
+					printf "\e[1;31mInternal error.  Please report the following info.\e[0m\n"
+					bug_report "Step: select_part" "Return code: $ret" ;;
+			esac
+		}
 
-		validate_part_selection "$2"
-		ret=$?
-		case "$ret" in
-			0) ;;
-			1) printf "\e[1;31mInvalid option, please try again\e[0m\n"; continue ;;
-			2) printf "\e[1;31mNot confirmed.\e[0m\n"; continue ;;
-			*)
-				printf "\e[1;31mInternal error.  Please report the following info.\e[0m\n";
-				bug_report "Step: validate_part" "Return code: $ret" ;;
-		esac
+		validate_part_selection "$2" || {
+			case "$?" in
+				1) printf "\e[1;31mInvalid option, please try again\e[0m\n"; continue ;;
+				2) printf "\e[1;31mNot confirmed.\e[0m\n"; continue ;;
+				*)
+					printf "\e[1;31mInternal error.  Please report the following info.\e[0m\n";
+					bug_report "Step: validate_part" "Return code: $ret" ;;
+			esac
+		}
+
 		printf "\e[32mPartition validated!\e[0m\n"
 		break
 	done
