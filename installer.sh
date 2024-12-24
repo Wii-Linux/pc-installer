@@ -316,7 +316,7 @@ do_configure() {
 
 	while true; do
 		# discard any double-enter taps or similar
-		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null
+		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null || true
 		printf "\e[33mWould you like to copy NetworkManager profiles from your host system?\e[0m [Y/n] "
 		read -r yesno
 		case "$yesno" in
@@ -336,7 +336,7 @@ do_configure() {
 
 	while true; do
 		# discard any double-enter taps or similar
-		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null
+		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null || true
 		printf "\e[33mWould you like to enable the SSH daemon to start automatically for remote login?\e[0m [Y/n] "
 		read -r yesno
 		case "$yesno" in
