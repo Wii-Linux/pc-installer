@@ -35,7 +35,7 @@ bug_report() {
 
 rescan_bdevs() {
 	all_bdevs=$(find /sys/block/ -mindepth 1 -maxdepth 1 \
-		! -name "loop*" ! -name "sr*" -exec basename {} \;)
+		! -name "loop*" ! -name "sr*" ! -name "ram*" ! -name "zram*" -exec basename {} \;)
 }
 
 
