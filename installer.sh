@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 product="\033[33mWii Linux \033[1;36mArchPOWER\033[0m PC Installer"
-version="0.0.5"
+version="0.0.6"
 printf "$product v$version\n"
 
 if [ "$(id -u)" != "0" ]; then
