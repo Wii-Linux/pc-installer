@@ -390,7 +390,7 @@ manual_install() {
 
 	echo "Wiping rootfs..."
 
-	wipefs -a "$rootfs_blkdev" && mkfs.ext4 -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
+	wipefs -a "$rootfs_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
 		printf "\033[1;31mFailed to format rootfs!\033[0m\n"
 		bug_report "Step: rootfs_format" "Return code: $ret" "Root blkdev: $rootfs_blkdev"
@@ -456,7 +456,7 @@ EOF
 	rootfs_blkdev="${loopdev}p2"
 
 	echo "Fomatting..."
-	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
+	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
 		printf "\033[1;31mFailed to format loopdev!\033[0m\n"
 		bug_report "Step: loopdev_format" "Return code: $ret" "Boot blkdev: $boot_blkdev" "Root blkdev: $rootfs_blkdev"
