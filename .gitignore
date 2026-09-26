@@ -1,1 +1,143 @@
+###############################################################################
+# GITIGNORE
+#
+# This file specifies intentionally untracked files that Git should ignore.
+# Files already tracked by Git are not affected.
+#
+# NOTE: Use 'git ls-files -i --exclude-standard -c' to check for tracked files
+# that are currently being ignored.
+###############################################################################
+
+
+# =============================================================================
+# INSTALLER DOWNLOADS
+# =============================================================================
+
+# Don't want to commit here downloaded archives from elsewhere
+*.tar
 *.tar.gz
+*.tar.xz
+*.tar.bz2
+*.tar.zst
+*.zip
+*.7z
+*.xz
+*.gz
+*.zst
+
+# Checksum files
+*.sha256
+*.sha512
+*.md5
+
+
+# =============================================================================
+# RUNTIME LOGS & ARTIFACTS
+# =============================================================================
+
+# Wget creates this log if it goes to background or is interrupted
+wget-log
+wget-log.*
+
+# General execution logs
+*.log
+
+
+# =============================================================================
+# PATCHES & DIFFS
+# =============================================================================
+
+# Used to share code changes outside of version control
+*.patch
+*.diff
+
+# Backup files and rejected hunks from the `patch` command
+*.rej
+*.orig
+
+
+# =============================================================================
+# EDITOR CONFIGURATION
+# =============================================================================
+
+# Vim
+*.swp
+*.swo
+*.swn
+*.swm
+*~
+.*.sw?
+.netrwhist
+Session.vim
+tags
+
+# Emacs
+\#*\#
+.\#*
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Nano
+*.save
+*.~
+
+# Kate / KWrite
+*.kate-swp
+.*.kate-swp
+
+# Gedit
+*~
+
+# Notepad++ (Windows)
+nppBackup/
+
+# Programmer's Notepad
+*.pnproj
+*.pnps
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+
+# =============================================================================
+# OPERATING SYSTEM FILES
+# =============================================================================
+
+# Linux / BSD
+core
+core.*
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+
+# =============================================================================
+# TEMPORARY FILES
+# =============================================================================
+
+# Temporary directories if created locally during dev/debug
+tmp/
+temp/
+/tmp/
+.tmp/
+
+# Generic backups
+*.bak
+*.backup
+*.old
+*.save
+
+
+# EOF

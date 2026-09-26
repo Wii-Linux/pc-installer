@@ -1,0 +1,28 @@
+###############################################################################
+# GIT ATTRIBUTES
+#
+# This file controls how git treats files. It is primarily used here to
+# enforce Unix-style (LF) line endings across the project, regardless of
+# the developer's operating system.
+###############################################################################
+
+
+# =============================================================================
+# GLOBAL LINE ENDING POLICY
+# =============================================================================
+
+# Enforce Unix (LF) endings for consistency and to prevent script errors
+*                           text=auto eol=lf
+
+
+# =============================================================================
+# REPOSITORY CONFIGURATION
+# =============================================================================
+
+# Exclude configuration files from exported archives/downloads
+.gitignore                  export-ignore
+.gitattributes              export-ignore
+.editorconfig               export-ignore
+
+
+# EOF

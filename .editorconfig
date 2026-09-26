@@ -1,0 +1,43 @@
+###############################################################################
+# EDITORCONFIG
+#
+# This file helps maintain consistent coding styles across various text editors.
+# It automatically configures settings like indentation style and line endings
+# for new edits.
+#
+# Learn more at: https://editorconfig.org
+###############################################################################
+
+# This is the root of the project, so stop searching for .editorconfig files
+root = true
+
+
+# =============================================================================
+# GLOBAL DEFAULTS
+# =============================================================================
+
+# These settings apply to all files in the project
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+
+# =============================================================================
+# FILE-TYPE SPECIFIC OVERRIDES
+# =============================================================================
+
+# Shell scripts (tabs, matching the existing code style)
+[*.sh]
+indent_style = tab
+indent_size = 4
+
+# Markdown (spaces for better compatibility with lists)
+[*.md]
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = false
+
+
+# EOF
