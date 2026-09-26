@@ -66,6 +66,12 @@ input_closed() {
 	exit 1
 }
 
+# Called when the user answers 'q' at a prompt.
+user_quit() {
+	printf "\033[33mInstallation cancelled by user.\033[0m\n"
+	exit 0
+}
+
 rescan_bdevs() {
 	all_bdevs=$(find /sys/block/ -mindepth 1 -maxdepth 1 \
 		! -name "loop*" ! -name "sr*" ! -name "ram*" ! -name "zram*" \
@@ -89,6 +95,16 @@ formatSize() {
 }
 
 select_disk() {
+	while [ -z "$all_bdevs" ]; do
+		printf "\033[1;31mNo eligible block devices found.\033[0m\n"
+		printf "Ensure a disk is connected, then press Enter to rescan (or 'q' to quit): "
+		read -r answer || input_closed
+		case "$answer" in
+			q|Q|quit|Quit|QUIT) user_quit ;;
+		esac
+		rescan_bdevs
+	done
+
 	i=1
 	for dev in $all_bdevs; do
 		size=$(cat "/sys/block/$dev/size")
@@ -101,8 +117,12 @@ select_disk() {
 	i=1
 
 	echo
-	printf "Select a disk: "
+	printf "Select a disk (or 'q' to quit): "
 	read -r devnum || input_closed
+
+	case "$devnum" in
+		q|Q|quit|Quit|QUIT) user_quit ;;
+	esac
 
 	for dev in $all_bdevs; do
 		if [ "$i" = "$devnum" ]; then
@@ -123,6 +143,15 @@ get_parts() {
 select_part() {
 	all_parts=$(get_parts "$1")
 
+	if [ -z "$all_parts" ]; then
+		printf '\033[1;31mNo partitions found on /dev/%s.\033[0m\n' "$1"
+		printf "The disk must be partitioned before using manual mode.\n"
+		# Return 3 (not 1) so the caller can tell "nothing to select" apart
+		# from an invalid menu choice; retrying here would spin forever with
+		# no prompt, since this branch never reads input.
+		return 3
+	fi
+
 	i=1
 	for part in $all_parts; do
 		size=$(cat "/sys/block/$1/$part/size")
@@ -135,8 +164,12 @@ select_part() {
 	i=1
 
 	echo
-	printf "Select a partition: "
+	printf "Select a partition (or 'q' to quit): "
 	read -r partnum || input_closed
+
+	case "$partnum" in
+		q|Q|quit|Quit|QUIT) user_quit ;;
+	esac
 
 	for part in $all_parts; do
 		if [ "$i" = "$partnum" ]; then
@@ -262,6 +295,13 @@ validate_and_select_part() {
 			_rc="$?"
 			case "$_rc" in
 				1) printf "\033[1;31mInvalid option, please try again\033[0m\n"; continue ;;
+				3)
+					# No partitions on the disk; retrying can't help (the disk
+					# needs partitioning first), and looping would spin without
+					# a prompt. Abort rather than hang.
+					printf "\033[1;31mCannot continue: the selected disk has no partitions to choose from.\033[0m\n"
+					printf "Partition the disk first, or restart and use automatic mode.\n"
+					exit 1 ;;
 				*)
 					printf "\033[1;31mInternal error.  Please report the following info.\033[0m\n"
 					bug_report "Step: select_part" "Return code: $_rc" ;;
@@ -289,11 +329,12 @@ select_root_disk() {
 	while true; do
 		printf "\033[33mYou can store \033[32mthe rootfs\033[33m (the actual system files and user data) on a different device.\n"
 		printf "This, however, is highly experimental, and will disable the auto-partitioning feature of this script.\n"
-		printf "Would you like to store the boot files and rootfs on separate devices?\033[0m [y/N] "
+		printf "Would you like to store the boot files and rootfs on separate devices?\033[0m [y/N/q] "
 		read -r yesno || input_closed
 		case "$yesno" in
 			y|Y|yes|YES) separate_sd_and_rootfs=true; break ;;
 			n|N|no|NO|"") separate_sd_and_rootfs=false; break ;;
+			q|Q|quit|Quit|QUIT) user_quit ;;
 			*) printf "\033[1;31mInvalid option, please try again\033[0m\n" ;;
 		esac
 	done
@@ -579,9 +620,10 @@ automatic_install() {
 
 	fatSize=""
 	while true; do
-		printf "\033[33mHow many MB of space would you like to reserve for the \033[32mFAT32 Boot files / Homebrew partition\033[33m?\033[0m [default:256, max:%s] " "$max_fat_mb"
+		printf "\033[33mHow many MB of space would you like to reserve for the \033[32mFAT32 Boot files / Homebrew partition\033[33m?\033[0m [default:256, max:%s, q to quit] " "$max_fat_mb"
 		read -r fatSz || input_closed
 		case "$fatSz" in
+			q|Q|quit|Quit|QUIT) user_quit ;;
 			*[!0-9]*) printf "\033[1;31mInvalid input!  Please type a number.\033[0m\n"; continue ;;
 			'') fatSize="256" ;;
 			*)
@@ -719,11 +761,12 @@ select_root_disk
 
 if [ "$separate_sd_and_rootfs" = "false" ]; then
 	while true; do
-		printf "\033[33mWould you like \033[32m[A]utomatic\033[33m or \033[32m[M]anual\033[33m install?\033[0m "
+		printf "\033[33mWould you like \033[32m[A]utomatic\033[33m or \033[32m[M]anual\033[33m install?\033[0m [a/m/q] "
 		read -r doauto || input_closed
 		case "$doauto" in
 			a|A|auto|Auto|AUTO|automatic|Automatic|AUTOMATIC) automatic_install ;;
 			m|M|man|Man|MAN|manual|Manual|MANUAL) manual_install ;;
+			q|Q|quit|Quit|QUIT) user_quit ;;
 			*) printf "\033[1;31mInvalid option, please try again\033[0m\n"; continue ;;
 		esac
 		break
