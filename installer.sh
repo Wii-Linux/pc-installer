@@ -14,7 +14,7 @@ boot_mnt=""
 rootfs_blkdev=""
 rootfs_mnt=""
 all_bdevs=""
-seperate_sd_and_rootfs=""
+separate_sd_and_rootfs=""
 
 
 selection=""
@@ -223,16 +223,16 @@ select_root_disk() {
 	while true; do
 		printf "\033[33mYou can store \033[32mthe rootfs\033[33m (the actual system files and user data) on a different device.\n"
 		printf "This, however, is highly experimental, and will disable the auto-partitioning feature of this script.\n"
-		printf "Would you like to store the boot files and rootfs on seperate devices?\033[0m [y/N] "
+		printf "Would you like to store the boot files and rootfs on separate devices?\033[0m [y/N] "
 		read -r yesno
 		case "$yesno" in
-			y|Y|yes|YES) seperate_sd_and_rootfs=true; break ;;
-			n|N|no|NO|"") seperate_sd_and_rootfs=false; break ;;
+			y|Y|yes|YES) separate_sd_and_rootfs=true; break ;;
+			n|N|no|NO|"") separate_sd_and_rootfs=false; break ;;
 			*) printf "\033[1;31mInvalid option, please try again\033[0m\n" ;;
 		esac
 	done
 
-	if [ "$seperate_sd_and_rootfs" = "true" ]; then
+	if [ "$separate_sd_and_rootfs" = "true" ]; then
 		while ! select_disk; do
 			printf "\033[1;31mInvalid option, please try again\033[0m\n"
 			rescan_bdevs
@@ -404,7 +404,7 @@ manual_install() {
 
 automatic_install() {
 	# currently, boot_blkdev is our SD Card.
-	# Let's unmount and erase any partitons on it before we try to repartition
+	# Let's unmount and erase any partitions on it before we try to repartition
 	sd_blkdev="$boot_blkdev"
 
 	echo "Cleaning disk..."
@@ -412,7 +412,7 @@ automatic_install() {
 
 	fatSize=""
 	while true; do
-		printf "\033[33mHow many MB of space would you like to reserve for the \033[32mFAT32 Boot files / Homebrew partiton\033[33m?\033[0m [default:256] "
+		printf "\033[33mHow many MB of space would you like to reserve for the \033[32mFAT32 Boot files / Homebrew partition\033[33m?\033[0m [default:256] "
 		read -r fatSz
 		case "$fatSz" in
 			*[!0-9]*) printf "\033[1;31mInvalid input!  Please type a number.\033[0m\n"; continue ;;
@@ -455,7 +455,7 @@ EOF
 	boot_blkdev="${loopdev}p1"
 	rootfs_blkdev="${loopdev}p2"
 
-	echo "Fomatting..."
+	echo "Formatting..."
 	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
 		printf "\033[1;31mFailed to format loopdev!\033[0m\n"
@@ -485,7 +485,7 @@ boot_blkdev="$selection"
 
 select_root_disk
 
-if [ "$seperate_sd_and_rootfs" = "false" ]; then
+if [ "$separate_sd_and_rootfs" = "false" ]; then
 	while true; do
 		printf "\033[33mWould you like \033[32m[A]utomatic\033[33m or \033[32m[M]anual\033[33m install?\033[0m "
 		read -r doauto
