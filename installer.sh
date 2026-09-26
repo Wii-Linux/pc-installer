@@ -458,6 +458,17 @@ toggle_udisks() {
 
 
 
+# Advance the spinner animation: sets $frame from the counter $i
+next_frame() {
+	i=$(( (i + 1) % 4 ))
+	case $i in
+		0) frame="|" ;;
+		1) frame="/" ;;
+		2) frame="-" ;;
+		3) frame="\\" ;;
+	esac
+}
+
 # $1 = PID to wait for, $2 = message
 # Only shows that the process is still running; callers check its exit code.
 spinner() {
@@ -466,17 +477,73 @@ spinner() {
 
 	i=0
 	while kill -0 "$pid" 2>/dev/null; do
-		i=$(( (i + 1) % 4 ))
-		case $i in
-			0) frame="|" ;;
-			1) frame="/" ;;
-			2) frame="-" ;;
-			3) frame="\\" ;;
-		esac
+		next_frame
 		printf '\r[%s] %s...' "$frame" "$msg"
 		sleep 0.1
 	done
 	printf '\r[*] %s finished.       \n' "$msg"
+}
+
+# Flush all pending writes, showing how fast the disk holding $2 is being
+# written to.  Falls back to a plain spinner if the disk's stats can't be read.
+# $1 = message, $2 = a partition (or disk) being written to
+sync_progress() {
+	msg="$1"
+	part_name=$(basename "$2")
+
+	# Writes are counted per disk, so find the disk the partition is on
+	# (e.g. sda for /dev/sda2)
+	if [ -e "/sys/block/$part_name" ]; then
+		disk_name="$part_name"
+	else
+		disk_name=$(basename "$(dirname "$(readlink -f "/sys/class/block/$part_name")")")
+	fi
+	stat_file="/sys/block/$disk_name/stat"
+
+	sync &
+	_job=$!
+	_bg_pids="${_bg_pids:+$_bg_pids }$_job"
+
+	if [ ! -f "$stat_file" ]; then
+		spinner "$_job" "$msg"
+	else
+		i=0
+		ticks=0
+		kb_s=""
+		# Field 7 of the stat file is the number of 512-byte sectors written
+		s1=$(awk '{print $7}' "$stat_file" 2>/dev/null || true)
+		s1=${s1:-0}
+
+		while kill -0 "$_job" 2>/dev/null; do
+			next_frame
+
+			# Update the rate every second (10 ticks)
+			if [ "$ticks" -eq 10 ]; then
+				s2=$(awk '{print $7}' "$stat_file" 2>/dev/null || true)
+				s2=${s2:-0}
+				kb_s=$(( (s2 - s1) / 2 ))
+				[ "$kb_s" -lt 0 ] && kb_s=0
+				s1=$s2
+				ticks=0
+			fi
+
+			if [ -z "$kb_s" ]; then
+				status="Calculating..."
+			elif [ "$kb_s" -gt 0 ]; then
+				status="Writing to $disk_name: $kb_s KB/s"
+			else
+				status="Finishing up"
+			fi
+			printf '\r[%s] %s... (%s)\033[K' "$frame" "$msg" "$status"
+
+			sleep 0.1
+			ticks=$((ticks + 1))
+		done
+		printf '\r[*] %s finished.\033[K\n' "$msg"
+	fi
+
+	wait "$_job" || true
+	_bg_pids=""
 }
 
 # Run a command in the background with a spinner, keeping its output in a log
@@ -623,7 +690,6 @@ install_root() {
 		printf "\033[1;31mFATAL ERROR: Failed to extract rootfs!\033[0m\n"
 		bug_report "Step: install_root_extract" "Return code: $ret"
 	}
-	sync "$rootfs_mnt"
 }
 
 
@@ -673,6 +739,8 @@ do_configure() {
 
 unmount_and_cleanup() {
 	printf "\033[32mSuccess!  Now syncing to disk and cleaning up, please wait...\033[0m\n"
+	sync_progress "Syncing" "$rootfs_blkdev"
+
 	umount "$boot_mnt" || {
 		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to unmount boot partition.\033[0m\n"
