@@ -751,7 +751,49 @@ do_configure() {
 		ln -sf "/usr/lib/systemd/system/sshd.service" "$rootfs_mnt/etc/systemd/system/multi-user.target.wants/sshd.service"
 	fi
 
-	# TODO: More here.... set up user account?
+	# Hostname: offer to replace the one shipped in the rootfs
+	default_hostname=""
+	if [ -f "$rootfs_mnt/etc/hostname" ]; then
+		default_hostname=$(head -n 1 "$rootfs_mnt/etc/hostname" | tr -d '[:space:]')
+	fi
+
+	while true; do
+		drain_stdin
+		if [ -n "$default_hostname" ]; then
+			printf "\033[33mEnter a hostname for this Wii\033[0m (leave blank to keep '%s'): " "$default_hostname"
+		else
+			printf "\033[33mEnter a hostname for this Wii\033[0m (leave blank to skip): "
+		fi
+		read -r hostname || input_closed
+
+		[ -z "$hostname" ] && break
+
+		# RFC 1123 host name label: letters, digits and hyphens, 1-63
+		# characters, not starting or ending with a hyphen
+		case "$hostname" in
+			-*|*-|*[!a-zA-Z0-9-]*) valid=false ;;
+			*) valid=true ;;
+		esac
+		if [ "$valid" = "false" ] || [ "${#hostname}" -gt 63 ]; then
+			printf "\033[1;31mInvalid hostname.\033[0m\n"
+			printf "Hostnames must be 1-63 characters long, contain only letters, numbers\n"
+			printf "and hyphens, and not start or end with a hyphen.\n"
+			continue
+		fi
+
+		printf '%s\n' "$hostname" > "$rootfs_mnt/etc/hostname"
+
+		# Point 127.0.1.1 at the new name, replacing any existing entry
+		if [ -f "$rootfs_mnt/etc/hosts" ]; then
+			sed -i '/^127\.0\.1\.1[[:blank:]]/d' "$rootfs_mnt/etc/hosts"
+		fi
+		printf '127.0.1.1\t%s\n' "$hostname" >> "$rootfs_mnt/etc/hosts"
+
+		printf "\033[32mHostname set to '%s'!\033[0m\n" "$hostname"
+		break
+	done
+
+	# Future work: interactive user account setup (password, sudo, etc.)
 }
 
 unmount_and_cleanup() {
