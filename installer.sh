@@ -36,7 +36,8 @@ bug_report() {
 
 rescan_bdevs() {
 	all_bdevs=$(find /sys/block/ -mindepth 1 -maxdepth 1 \
-		! -name "loop*" ! -name "sr*" ! -name "ram*" ! -name "zram*" -exec basename {} \;)
+		! -name "loop*" ! -name "sr*" ! -name "ram*" ! -name "zram*" \
+		! -name "dm-*" ! -name "md*" -exec basename {} \; | sort)
 }
 
 
@@ -84,7 +85,7 @@ select_disk() {
 
 
 get_parts() {
-	find "/sys/block/$1/" -mindepth 1 -maxdepth 1 -name "${1}*" -exec basename {} \; | sort
+	find "/sys/block/$1/" -mindepth 1 -maxdepth 1 -name "${1}*" -exec basename {} \; | sort -V
 }
 
 select_part() {
