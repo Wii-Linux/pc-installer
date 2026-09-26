@@ -604,7 +604,8 @@ install_boot() {
 
 	boot_mnt="$(mount_in_tmpdir_or_die "$boot_blkdev")"
 	printf 'Now installing the boot files...\n'
-	extract_tarball "$tarball_name" "$boot_mnt" || {
+	# FAT32 has no Unix owners or permissions, so don't try to restore them
+	extract_tarball "$tarball_name" "$boot_mnt" --no-same-owner --no-same-permissions || {
 		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to extract boot files!\033[0m\n"
 		bug_report "Step: install_boot_extract" "Return code: $ret"
