@@ -144,11 +144,14 @@ rescan_bdevs() {
 }
 
 
+# $1 = size in KiB.  Prints it in the largest fitting unit with one decimal
+# place, rounded down so a size is never overstated (e.g. 1907MiB -> 1.8G).
 formatSize() {
 	size=$1
+	unit=1
 	suffix="K"
-	while [ "$size" -ge "1024" ]; do
-		size=$((size / 1024))
+	while [ $((size / unit)) -ge 1024 ] && [ "$suffix" != "T" ]; do
+		unit=$((unit * 1024))
 		case $suffix in
 			"K") suffix="M" ;;
 			"M") suffix="G" ;;
@@ -156,7 +159,17 @@ formatSize() {
 		esac
 	done
 
-	printf '%s%s\n' "$size" "$suffix"
+	if [ "$unit" -eq 1 ]; then
+		printf '%s%s\n' "$size" "$suffix"
+		return
+	fi
+
+	# Tenths from the remainder, dividing by unit/10 rather than multiplying
+	# the remainder by 10, so the arithmetic can't overflow in shells with
+	# 32-bit integers
+	tenths=$(( (size % unit) / (unit / 10) ))
+	[ "$tenths" -gt 9 ] && tenths=9
+	printf '%s.%s%s\n' "$((size / unit))" "$tenths" "$suffix"
 }
 
 select_disk() {
