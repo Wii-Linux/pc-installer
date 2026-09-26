@@ -34,6 +34,28 @@ bug_report() {
 	exit 1
 }
 
+cleanup() {
+	# Only attempt cleanup if variables are set
+	if [ -n "$boot_mnt" ] && [ -d "$boot_mnt" ]; then
+		if mountpoint -q "$boot_mnt" 2>/dev/null; then
+			umount "$boot_mnt" 2>/dev/null || true
+		fi
+		rmdir "$boot_mnt" 2>/dev/null || true
+	fi
+
+	if [ -n "$rootfs_mnt" ] && [ -d "$rootfs_mnt" ]; then
+		if mountpoint -q "$rootfs_mnt" 2>/dev/null; then
+			umount "$rootfs_mnt" 2>/dev/null || true
+		fi
+		rmdir "$rootfs_mnt" 2>/dev/null || true
+	fi
+}
+# On INT/TERM, just exit: the EXIT trap then runs cleanup exactly once.
+# (Trapping INT with cleanup itself would return to the interrupted code
+# afterward instead of stopping, and run cleanup a second time on exit.)
+trap cleanup EXIT
+trap "exit 1" INT TERM
+
 # Called as 'read -r var || input_closed'.  On end of input (Ctrl+D or a
 # closed stdin), read fails: under set -e that would kill the script with no
 # explanation, and ignoring it would make menu loops spin forever on empty
