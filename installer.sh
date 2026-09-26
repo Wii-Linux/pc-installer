@@ -425,6 +425,16 @@ unmount_and_cleanup() {
 }
 
 manual_install() {
+	# The Wii's FAT drivers (libfat in the Homebrew Channel, FatFs in BootMii)
+	# only read MBR partition tables, so a GPT boot disk would install without
+	# error and then never boot.  Automatic mode always writes an MBR table.
+	pttype=$(blkid -p -s PTTYPE -o value "/dev/$boot_blkdev" 2>/dev/null || true)
+	if [ -n "$pttype" ] && [ "$pttype" != "dos" ]; then
+		printf '\033[1;31mThe SD card / boot disk uses a %s partition table, but the Wii can only boot from MBR.\033[0m\n' "$pttype"
+		printf "Repartition it with an MBR (DOS) partition table, or restart the installer and\nchoose automatic mode (which repartitions the whole disk).\n"
+		exit 1
+	fi
+
 	printf "\033[33mWe now need to know \033[32mwhat partition to store the boot files\033[33m in.\033[0m\n"
 	validate_and_select_part "$boot_blkdev" "boot"
 	boot_blkdev="/dev/$selection"
