@@ -23,14 +23,14 @@ selection_info=""
 
 bug_report() {
 	exec >&2
-	echo "Please attach everything below this line!"
+	printf 'Please attach everything below this line!\n'
 	printf "=== %s - BUG REPORT ===\n" "$product_plain"
-	echo "VERSION: $version"
+	printf 'VERSION: %s\n' "$version"
 	for arg in "$@"; do
 		printf '%s\n' "$arg"
 	done
-	echo "=== END OF BUG REPORT ==="
-	echo "Now exiting.  Please attach the following bug report and submit a GitHub issue."
+	printf '=== END OF BUG REPORT ===\n'
+	printf 'Now exiting.  Please attach the following bug report and submit a GitHub issue.\n'
 	exit 1
 }
 
@@ -52,7 +52,7 @@ formatSize() {
 		esac
 	done
 
-	echo "${size}${suffix}"
+	printf '%s%s\n' "$size" "$suffix"
 }
 
 select_disk() {
@@ -62,7 +62,7 @@ select_disk() {
 		size=$((size * 512))
 		size=$(formatSize $size)
 
-		echo "[$i] /dev/$dev - $size"
+		printf '[%s] /dev/%s - %s\n' "$i" "$dev" "$size"
 		i=$((i + 1))
 	done
 	i=1
@@ -96,7 +96,7 @@ select_part() {
 		size=$((size * 512))
 		size="$(formatSize "$size")"
 
-		echo "[$i] /dev/$part - $size"
+		printf '[%s] /dev/%s - %s\n' "$i" "$part" "$size"
 		i=$((i + 1))
 	done
 	i=1
@@ -278,13 +278,13 @@ mount_in_tmpdir_or_die() {
 	}
 
 	# success
-	echo "$tmp"
+	printf '%s\n' "$tmp"
 }
 
 
 
 install_boot() {
-	echo "Now downloading the boot files..."
+	printf 'Now downloading the boot files...\n'
 	tarball_name="wii_linux_sd_files_archpower-latest.tar.gz"
 	if ! wget --continue "https://wii-linux.org/files/$tarball_name"; then
 		printf "\033[1;31mFATAL ERROR: Failed to download boot files.\033[0m\n"
@@ -292,20 +292,20 @@ install_boot() {
 	fi
 
 	boot_mnt="$(mount_in_tmpdir_or_die "$boot_blkdev")"
-	echo "Now installing the boot files..."
+	printf 'Now installing the boot files...\n'
 	tar xzf "$tarball_name" -C "$boot_mnt/"
 }
 
 install_root() {
 	tarball_name="wii_linux_rootfs_archpower-latest.tar.gz"
-	echo "Now downloading the rootfs..."
+	printf 'Now downloading the rootfs...\n'
 	if ! wget --continue "https://wii-linux.org/files/$tarball_name"; then
 		printf "\033[1;31mFATAL ERROR: Failed to download rootfs.\033[0m\n"
 		exit 1
 	fi
 
 	rootfs_mnt="$(mount_in_tmpdir_or_die "$rootfs_blkdev")"
-	echo "Now installing the rootfs... (this will take a VERY long time on most storage media)"
+	printf 'Now installing the rootfs... (this will take a VERY long time on most storage media)\n'
 	tar -xP --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse -f "$tarball_name" -C "$rootfs_mnt/"
 	sync "$rootfs_mnt"
 }
@@ -393,7 +393,7 @@ manual_install() {
 
 	install_boot
 
-	echo "Wiping rootfs..."
+	printf 'Wiping rootfs...\n'
 
 	wipefs -a "$rootfs_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
@@ -412,7 +412,7 @@ automatic_install() {
 	# Let's unmount and erase any partitions on it before we try to repartition
 	sd_blkdev="$boot_blkdev"
 
-	echo "Cleaning disk..."
+	printf 'Cleaning disk...\n'
 	clean_disk "$sd_blkdev"
 
 	fatSize=""
@@ -430,7 +430,7 @@ automatic_install() {
 		break
 	done
 
-	echo "Repartitioning..."
+	printf 'Repartitioning...\n'
 	cat << EOF | fdisk "/dev/$sd_blkdev" > /dev/null
 o
 n
@@ -453,14 +453,14 @@ EOF
 		bug_report "Step: loopdev_create" "Return code: $ret"
 	}
 
-	echo "Giving the kernel a few seconds to populate the partition table"
+	printf 'Giving the kernel a few seconds to populate the partition table\n'
 	sync
 	sleep 3
 
 	boot_blkdev="${loopdev}p1"
 	rootfs_blkdev="${loopdev}p2"
 
-	echo "Formatting..."
+	printf 'Formatting...\n'
 	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
 		printf "\033[1;31mFailed to format loopdev!\033[0m\n"
@@ -478,7 +478,7 @@ EOF
 # ====
 # Start of the actual installer process
 # ====
-echo "We need to gather some info about where you would like to install to..."
+printf 'We need to gather some info about where you would like to install to...\n'
 rescan_bdevs
 
 printf "\033[33mWe now need to know where your \033[32mSD Card\033[33m is.\033[0m\n"
