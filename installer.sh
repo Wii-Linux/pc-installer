@@ -111,7 +111,13 @@ select_disk() {
 		size=$((size / 2))
 		size=$(formatSize "$size")
 
-		printf '[%s] /dev/%s - %s\n' "$i" "$dev" "$size"
+		# Check if removable (typically SD cards/USB drives)
+		removable=""
+		if [ -f "/sys/block/$dev/removable" ] && [ "$(cat "/sys/block/$dev/removable")" = "1" ]; then
+			removable=$(printf ' \033[32m(Removable)\033[0m')
+		fi
+
+		printf '[%s] /dev/%s - %s%s\n' "$i" "$dev" "$size" "$removable"
 		i=$((i + 1))
 	done
 	i=1
