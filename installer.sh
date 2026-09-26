@@ -17,6 +17,7 @@ rootfs_mnt=""
 all_bdevs=""
 separate_sd_and_rootfs=""
 boot_needs_format=false
+udisks_was_running=false
 
 
 selection=""
@@ -50,6 +51,9 @@ cleanup() {
 		fi
 		rmdir "$rootfs_mnt" 2>/dev/null || true
 	fi
+
+	# Restart udisks2 if we exit while it is suspended
+	toggle_udisks start
 }
 # On INT/TERM, just exit: the EXIT trap then runs cleanup exactly once.
 # (Trapping INT with cleanup itself would return to the interrupted code
@@ -401,6 +405,37 @@ settle_udev() {
 	fi
 }
 
+# Suspend udisks2 while we repartition and format, so the desktop doesn't
+# auto-mount or probe the partitions mid-operation.  udisks2 is D-Bus
+# activated, so a plain stop would be undone by the next desktop request;
+# mask it too.  --runtime keeps the mask in /run, so it is gone after a
+# reboot even if the installer is killed before it can unmask.
+# Only systemd is handled; udisks2 isn't used as a standalone service elsewhere.
+# $1 = "stop" or "start"
+toggle_udisks() {
+	command -v systemctl >/dev/null 2>&1 || return 0
+
+	if [ "$1" = "stop" ]; then
+		if systemctl is-active --quiet udisks2; then
+			printf 'Suspending udisks2 monitoring...\n'
+			systemctl mask --runtime --quiet udisks2 2>/dev/null || true
+			if systemctl stop udisks2; then
+				udisks_was_running=true
+			else
+				systemctl unmask --runtime --quiet udisks2 2>/dev/null || true
+				printf "\033[1;33mWarning: could not stop udisks2; continuing anyway.\033[0m\n"
+			fi
+		fi
+	elif [ "$1" = "start" ]; then
+		if [ "$udisks_was_running" = "true" ]; then
+			printf 'Resuming udisks2 monitoring...\n'
+			systemctl unmask --runtime --quiet udisks2 2>/dev/null || true
+			systemctl start udisks2 2>/dev/null || true
+			udisks_was_running=false
+		fi
+	fi
+}
+
 
 
 install_boot() {
@@ -566,6 +601,8 @@ manual_install() {
 			;;
 	esac
 
+	toggle_udisks stop
+
 	# Unmount selected partitions if the host OS has auto-mounted them
 	printf 'Unmounting selected partitions...\n'
 	for _dev in "$boot_blkdev" "$rootfs_blkdev"; do
@@ -593,12 +630,19 @@ manual_install() {
 		bug_report "Step: rootfs_format" "Return code: $ret" "Root blkdev: $rootfs_blkdev"
 	}
 
+	# Let udev finish processing the new filesystems before mounting them
+	settle_udev
+	sleep 2
+
 	install_boot
 	install_root
 
 	do_configure
 
 	unmount_and_cleanup
+
+	# Resume udisks2 only after the partitions are fully unmounted
+	toggle_udisks start
 }
 
 automatic_install() {
@@ -678,6 +722,8 @@ automatic_install() {
 
 	printf 'Proceeding with installation...\n'
 
+	toggle_udisks stop
+
 	# Unmount and erase any partitions on the disk before repartitioning
 	printf 'Cleaning disk...\n'
 	clean_disk "$sd_blkdev"
@@ -743,12 +789,19 @@ EOF
 		bug_report "Step: auto_format" "Return code: $ret" "Boot blkdev: $boot_blkdev" "Root blkdev: $rootfs_blkdev"
 	}
 
+	# Let udev finish processing the new filesystems before mounting them
+	settle_udev
+	sleep 2
+
 	install_boot
 	install_root
 
 	do_configure
 
 	unmount_and_cleanup
+
+	# Resume udisks2 only after the partitions are fully unmounted
+	toggle_udisks start
 }
 # ====
 # Start of the actual installer process
