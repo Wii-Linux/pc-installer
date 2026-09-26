@@ -517,6 +517,36 @@ format_root_part() {
 	wipefs -a "$1" && mkfs.ext4 -O '^encrypt,^verity,^metadata_csum_seed' -L 'arch' "$1"
 }
 
+# Extract a gzipped tarball, showing a progress bar if pv is installed and
+# a spinner otherwise.  Returns non-zero if reading or extracting failed.
+# $1 = tarball, $2 = destination directory, rest = extra tar options
+extract_tarball() {
+	_tarball="$1"
+	_dest="$2"
+	shift 2
+
+	if ! command -v pv >/dev/null 2>&1; then
+		run_with_spinner "Extracting" tar -xzf "$_tarball" "$@" -C "$_dest/"
+		return
+	fi
+
+	# Save pv's exit code separately: without pipefail (not POSIX) a pipeline
+	# only reports tar's, so a pv read error would go unnoticed and leave a
+	# truncated install.
+	_pv_rc=$(mktemp)
+	_tar_ret=0
+	{
+		_r=0
+		pv -p -t -e -r -b "$_tarball" || _r=$?
+		printf '%s\n' "$_r" > "$_pv_rc"
+	} | tar -xzf - "$@" -C "$_dest/" || _tar_ret=$?
+	_pv_ret=$(cat "$_pv_rc" 2>/dev/null || printf '1')
+	rm -f "$_pv_rc"
+
+	[ "$_tar_ret" -ne 0 ] && return "$_tar_ret"
+	return "$_pv_ret"
+}
+
 # $1 = URL, $2 = file name in the current directory
 download_or_use_local() {
 	url="$1"
@@ -574,7 +604,7 @@ install_boot() {
 
 	boot_mnt="$(mount_in_tmpdir_or_die "$boot_blkdev")"
 	printf 'Now installing the boot files...\n'
-	run_with_spinner "Extracting" tar xzf "$tarball_name" -C "$boot_mnt/" || {
+	extract_tarball "$tarball_name" "$boot_mnt" || {
 		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to extract boot files!\033[0m\n"
 		bug_report "Step: install_boot_extract" "Return code: $ret"
@@ -586,8 +616,8 @@ install_root() {
 	download_or_use_local "https://wii-linux.org/files/$tarball_name" "$tarball_name"
 
 	rootfs_mnt="$(mount_in_tmpdir_or_die "$rootfs_blkdev")"
-	printf 'Now installing the rootfs... (this will take a VERY long time on most storage media)\n'
-	run_with_spinner "Extracting" tar -x --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse -f "$tarball_name" -C "$rootfs_mnt/" || {
+	printf 'Now installing the rootfs... (this may take a while depending on storage speed)\n'
+	extract_tarball "$tarball_name" "$rootfs_mnt" --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse || {
 		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to extract rootfs!\033[0m\n"
 		bug_report "Step: install_root_extract" "Return code: $ret"
@@ -938,6 +968,12 @@ EOF
 # ====
 # Start of the actual installer process
 # ====
+if ! command -v pv >/dev/null 2>&1; then
+	printf "\033[1;33mNote: Install 'pv' for progress bars during extraction\033[0m\n"
+	printf "  (This is optional, installation will work without it)\n"
+	echo
+fi
+
 printf 'We need to gather some info about where you would like to install to...\n'
 rescan_bdevs
 
