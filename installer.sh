@@ -52,6 +52,11 @@ cleanup() {
 		rmdir "$rootfs_mnt" 2>/dev/null || true
 	fi
 
+	# Clean up the download temp file if the trap fires mid-download
+	if [ -n "$_dl_tmp" ] && [ -f "$_dl_tmp" ]; then
+		rm -f "$_dl_tmp" 2>/dev/null || true
+	fi
+
 	# Restart udisks2 if we exit while it is suspended
 	toggle_udisks start
 }
@@ -438,13 +443,60 @@ toggle_udisks() {
 
 
 
-install_boot() {
-	printf 'Now downloading the boot files...\n'
-	tarball_name="wii_linux_sd_files_archpower-latest.tar.gz"
-	if ! wget --continue "https://wii-linux.org/files/$tarball_name"; then
-		printf "\033[1;31mFATAL ERROR: Failed to download boot files.\033[0m\n"
+# $1 = URL, $2 = file name in the current directory
+download_or_use_local() {
+	url="$1"
+	filename="$2"
+
+	# Offer to reuse a copy left by a previous run
+	if [ -f "./$filename" ]; then
+		printf '\033[33mFound local file: %s\033[0m\n' "$filename"
+		printf "Use local file? [Y/n] "
+		read -r use_local || input_closed
+		case "$use_local" in
+			n|N|no|NO) ;;
+			*)
+				printf "\033[1;32mUsing local file!\033[0m\n"
+				return 0
+				;;
+		esac
+	fi
+
+	# Download next to the final file and rename it into place only once
+	# complete, so an interrupted download never looks like a finished one
+	# (and a large tarball isn't staged in a RAM-backed /tmp).
+	printf 'Downloading %s into %s...\n' "$filename" "$PWD"
+	_dl_tmp=$(mktemp "./.$filename.XXXXXX")
+	if ! wget --timeout=30 --tries=3 -O "$_dl_tmp" --show-progress --progress=bar:force "$url"; then
+		rm -f "$_dl_tmp"
+		_dl_tmp=""
+		printf '\033[1;31mFATAL ERROR: Failed to download %s\033[0m\n' "$filename"
 		exit 1
 	fi
+
+	if [ ! -s "$_dl_tmp" ]; then
+		rm -f "$_dl_tmp"
+		_dl_tmp=""
+		printf '\033[1;31mFATAL ERROR: Downloaded file is empty: %s\033[0m\n' "$filename"
+		exit 1
+	fi
+
+	mv -f "$_dl_tmp" "./$filename"
+	_dl_tmp=""
+
+	# mktemp creates the file private to root; make it readable, and let the
+	# user who ran sudo delete or move it
+	chmod 644 "./$filename"
+	if [ -n "$SUDO_UID" ] && [ -n "$SUDO_GID" ]; then
+		chown "$SUDO_UID:$SUDO_GID" "./$filename" 2>/dev/null || true
+	fi
+
+	printf "\033[32mDownload complete!\033[0m\n"
+}
+
+install_boot() {
+	tarball_name="wii_linux_sd_files_archpower-latest.tar.gz"
+	download_or_use_local "https://wii-linux.org/files/$tarball_name" "$tarball_name"
 
 	boot_mnt="$(mount_in_tmpdir_or_die "$boot_blkdev")"
 	printf 'Now installing the boot files...\n'
@@ -453,11 +505,7 @@ install_boot() {
 
 install_root() {
 	tarball_name="wii_linux_rootfs_archpower-latest.tar.gz"
-	printf 'Now downloading the rootfs...\n'
-	if ! wget --continue "https://wii-linux.org/files/$tarball_name"; then
-		printf "\033[1;31mFATAL ERROR: Failed to download rootfs.\033[0m\n"
-		exit 1
-	fi
+	download_or_use_local "https://wii-linux.org/files/$tarball_name" "$tarball_name"
 
 	rootfs_mnt="$(mount_in_tmpdir_or_die "$rootfs_blkdev")"
 	printf 'Now installing the rootfs... (this will take a VERY long time on most storage media)\n'
