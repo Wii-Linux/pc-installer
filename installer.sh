@@ -18,6 +18,8 @@ all_bdevs=""
 separate_sd_and_rootfs=""
 boot_needs_format=false
 udisks_was_running=false
+_bg_pids=""
+_spin_log=""
 
 
 selection=""
@@ -37,6 +39,14 @@ bug_report() {
 }
 
 cleanup() {
+	# Stop any background job still running.  kill $(jobs -p) is unreliable in
+	# POSIX sh because command substitutions run in a subshell with an empty
+	# job table (notably dash, which is /bin/sh on Debian/Ubuntu).
+	for _p in $_bg_pids; do
+		kill "$_p" 2>/dev/null || true
+	done
+	wait 2>/dev/null || true
+
 	# Only attempt cleanup if variables are set
 	if [ -n "$boot_mnt" ] && [ -d "$boot_mnt" ]; then
 		if mountpoint -q "$boot_mnt" 2>/dev/null; then
@@ -50,6 +60,11 @@ cleanup() {
 			umount "$rootfs_mnt" 2>/dev/null || true
 		fi
 		rmdir "$rootfs_mnt" 2>/dev/null || true
+	fi
+
+	# Clean up the background job log if the trap fires mid-job
+	if [ -n "$_spin_log" ] && [ -f "$_spin_log" ]; then
+		rm -f "$_spin_log" 2>/dev/null || true
 	fi
 
 	# Clean up the download temp file if the trap fires mid-download
@@ -443,6 +458,65 @@ toggle_udisks() {
 
 
 
+# $1 = PID to wait for, $2 = message
+# Only shows that the process is still running; callers check its exit code.
+spinner() {
+	pid="$1"
+	msg="$2"
+
+	i=0
+	while kill -0 "$pid" 2>/dev/null; do
+		i=$(( (i + 1) % 4 ))
+		case $i in
+			0) frame="|" ;;
+			1) frame="/" ;;
+			2) frame="-" ;;
+			3) frame="\\" ;;
+		esac
+		printf '\r[%s] %s...' "$frame" "$msg"
+		sleep 0.1
+	done
+	printf '\r[*] %s finished.       \n' "$msg"
+}
+
+# Run a command in the background with a spinner, keeping its output in a log
+# that is only shown if it fails (so it can't garble the spinner line).
+# $1 = message, rest = command.  Returns the command's exit code.
+run_with_spinner() {
+	msg="$1"
+	shift
+
+	_spin_log=$(mktemp)
+	"$@" > "$_spin_log" 2>&1 &
+	_job=$!
+	_bg_pids="${_bg_pids:+$_bg_pids }$_job"
+
+	spinner "$_job" "$msg"
+
+	_job_ret=0
+	wait "$_job" || _job_ret=$?
+	# Forget the finished job, so cleanup can't kill an unrelated process
+	# that has since reused its PID
+	_bg_pids=""
+	if [ "$_job_ret" -ne 0 ]; then
+		printf '%s\n' '--- Error Log ---'
+		cat "$_spin_log"
+	fi
+	rm -f "$_spin_log"
+	_spin_log=""
+	return "$_job_ret"
+}
+
+# $1 = partition to erase and format
+format_boot_part() {
+	wipefs -a "$1" && mkfs.vfat -F 32 "$1"
+}
+
+# $1 = partition to erase and format
+format_root_part() {
+	wipefs -a "$1" && mkfs.ext4 -O '^encrypt,^verity,^metadata_csum_seed' -L 'arch' "$1"
+}
+
 # $1 = URL, $2 = file name in the current directory
 download_or_use_local() {
 	url="$1"
@@ -500,7 +574,11 @@ install_boot() {
 
 	boot_mnt="$(mount_in_tmpdir_or_die "$boot_blkdev")"
 	printf 'Now installing the boot files...\n'
-	tar xzf "$tarball_name" -C "$boot_mnt/"
+	run_with_spinner "Extracting" tar xzf "$tarball_name" -C "$boot_mnt/" || {
+		ret=$?
+		printf "\033[1;31mFATAL ERROR: Failed to extract boot files!\033[0m\n"
+		bug_report "Step: install_boot_extract" "Return code: $ret"
+	}
 }
 
 install_root() {
@@ -509,7 +587,11 @@ install_root() {
 
 	rootfs_mnt="$(mount_in_tmpdir_or_die "$rootfs_blkdev")"
 	printf 'Now installing the rootfs... (this will take a VERY long time on most storage media)\n'
-	tar -x --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse -f "$tarball_name" -C "$rootfs_mnt/"
+	run_with_spinner "Extracting" tar -x --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse -f "$tarball_name" -C "$rootfs_mnt/" || {
+		ret=$?
+		printf "\033[1;31mFATAL ERROR: Failed to extract rootfs!\033[0m\n"
+		bug_report "Step: install_root_extract" "Return code: $ret"
+	}
 	sync "$rootfs_mnt"
 }
 
@@ -662,17 +744,15 @@ manual_install() {
 		fi
 	done
 
-	printf 'Formatting...\n'
-
 	# Format boot if it wasn't already the correct type, always format rootfs
 	if [ "$boot_needs_format" = "true" ]; then
-		{ wipefs -a "$boot_blkdev" && mkfs.vfat -F 32 "$boot_blkdev"; } || {
+		run_with_spinner "Formatting boot partition" format_boot_part "$boot_blkdev" || {
 			ret=$?
 			printf "\033[1;31mFailed to format boot partition!\033[0m\n"
 			bug_report "Step: boot_format" "Return code: $ret" "Boot blkdev: $boot_blkdev"
 		}
 	fi
-	{ wipefs -a "$rootfs_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev"; } || {
+	run_with_spinner "Formatting rootfs" format_root_part "$rootfs_blkdev" || {
 		ret=$?
 		printf "\033[1;31mFailed to format rootfs!\033[0m\n"
 		bug_report "Step: rootfs_format" "Return code: $ret" "Root blkdev: $rootfs_blkdev"
@@ -830,11 +910,15 @@ EOF
 		exit 1
 	fi
 
-	printf 'Formatting...\n'
-	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
-		ret="$?"
-		printf "\033[1;31mFailed to format partitions!\033[0m\n"
-		bug_report "Step: auto_format" "Return code: $ret" "Boot blkdev: $boot_blkdev" "Root blkdev: $rootfs_blkdev"
+	run_with_spinner "Formatting boot partition" format_boot_part "$boot_blkdev" || {
+		ret=$?
+		printf "\033[1;31mFailed to format boot partition!\033[0m\n"
+		bug_report "Step: auto_format" "Return code: $ret" "Boot blkdev: $boot_blkdev"
+	}
+	run_with_spinner "Formatting rootfs" format_root_part "$rootfs_blkdev" || {
+		ret=$?
+		printf "\033[1;31mFailed to format rootfs!\033[0m\n"
+		bug_report "Step: auto_format" "Return code: $ret" "Root blkdev: $rootfs_blkdev"
 	}
 
 	# Let udev finish processing the new filesystems before mounting them
