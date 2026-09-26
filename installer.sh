@@ -306,7 +306,7 @@ install_root() {
 
 	rootfs_mnt="$(mount_in_tmpdir_or_die "$rootfs_blkdev")"
 	printf 'Now installing the rootfs... (this will take a VERY long time on most storage media)\n'
-	tar -xP --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse -f "$tarball_name" -C "$rootfs_mnt/"
+	tar -x --acls --xattrs --same-owner --same-permissions --numeric-owner --sparse -f "$tarball_name" -C "$rootfs_mnt/"
 	sync "$rootfs_mnt"
 }
 
