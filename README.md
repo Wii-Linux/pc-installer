@@ -103,11 +103,12 @@ sudo apk add util-linux e2fsprogs dosfstools wget tar pv parted coreutils
 
 ## Tested Host Distros
 
-| Tester    | Platform                      | Testing date | Status  | Additional Notes                  |
-| --------- | ----------------------------- | ------------ | ------- | --------------------------------- |
-| Techflash | Arch Linux, AMD64 PC          | Dec 03, 2024 | Working | Automatic w/ SD                   |
-| Techflash | Debian 12, BeagleBone Black   | Dec 23, 2024 | Working | Manual w/ SD, took a few fixes    |
-| Selim     | Ubuntu (24.04 LTS?), AMD64 PC | Dec 19, 2024 | Working | Automatic w/ SD, took a few fixes |
+| Tester      | Platform                      | Testing date | Status  | Additional Notes                  |
+| ----------- | ----------------------------- | ------------ | ------- | --------------------------------- |
+| Techflash   | Arch Linux, AMD64 PC          | Dec 03, 2024 | Working | Automatic w/ SD                   |
+| Techflash   | Debian 12, BeagleBone Black   | Dec 23, 2024 | Working | Manual w/ SD, took a few fixes    |
+| Selim       | Ubuntu (24.04 LTS?), AMD64 PC | Dec 19, 2024 | Working | Automatic w/ SD, took a few fixes |
+| DeltaResero | Alpine Linux 3.24, i686 VM    | Sep 26, 2026 | Working | Auto & Manual w/ 2GB SD           |
 
 ## Troubleshooting
 
