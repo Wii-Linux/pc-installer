@@ -151,8 +151,8 @@ validate_part_selection() {
 
 	# is vfat?
 	(
-		eval "$(blkid --output=export "/dev/$selection")"
-		if [ "$TYPE" != "$correct_type" ]; then
+		fstype=$(blkid -s TYPE -o value "/dev/$selection" 2>/dev/null || true)
+		if [ "$fstype" != "$correct_type" ]; then
 			printf '\033[1;33mWe must \033[31mFORMAT\033[33m this partition in order to make it usable for a %s partition.\n' "$name2"
 			printf "Are you \033[31mSURE\033[33m that you want to \033[31mFORMAT\033[33m this partition, and lose \033[31mALL DATA\033[33m on it?\033[0m [y/N] "
 
