@@ -168,7 +168,7 @@ validate_part_selection() {
 
 					if [ "$ret" != "0" ]; then
 						printf '\033[1;31mFATAL ERROR - Failed to format %s partition!\033[0m\n' "$name2"
-						bug_report "Step: format_part" "Return code: $?"
+						bug_report "Step: format_part" "Return code: $ret"
 					fi
 
 					printf "\033[32mPartition formatted!\033[0m\n"
@@ -197,21 +197,23 @@ validate_part_selection() {
 validate_and_select_part() {
 	while true; do
 		select_part "$1" || {
-			case "$?" in
+			_rc="$?"
+			case "$_rc" in
 				1) printf "\033[1;31mInvalid option, please try again\033[0m\n"; continue ;;
 				*)
 					printf "\033[1;31mInternal error.  Please report the following info.\033[0m\n"
-					bug_report "Step: select_part" "Return code: $ret" ;;
+					bug_report "Step: select_part" "Return code: $_rc" ;;
 			esac
 		}
 
 		validate_part_selection "$2" || {
-			case "$?" in
+			_rc="$?"
+			case "$_rc" in
 				1) printf "\033[1;31mInvalid option, please try again\033[0m\n"; continue ;;
 				2) printf "\033[1;31mNot confirmed.\033[0m\n"; continue ;;
 				*)
 					printf "\033[1;31mInternal error.  Please report the following info.\033[0m\n";
-					bug_report "Step: validate_part" "Return code: $ret" ;;
+					bug_report "Step: validate_part" "Return code: $_rc" ;;
 			esac
 		}
 
@@ -247,13 +249,11 @@ select_root_disk() {
 clean_disk() {
 	for dev in $(get_parts "$1") "$1"; do
 		if grep -qw "/dev/$dev" /proc/mounts; then
-			umount "/dev/$dev"
-			ret="$?"
-
-			if [ "$ret" != "0" ]; then
+			umount "/dev/$dev" || {
+				ret=$?
 				printf '\033[1;31mFATAL ERROR: Failed to unmount /dev/%s\033[0m\n' "$dev"
 				bug_report "Step: auto_install_unmount" "Return code: $ret"
-			fi
+			}
 		fi
 
 		# known unmounted successfully
@@ -358,21 +358,25 @@ do_configure() {
 unmount_and_cleanup() {
 	printf "\033[32mSuccess!  Now syncing to disk and cleaning up, please wait...\n"
 	umount "$boot_mnt" || {
+		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to unmount boot partition.\033[0m\n"
 		bug_report "Step: unmount_and_cleanup_boot" "Return code: $ret" "Boot mnt: $boot_mnt" "Root mnt: $rootfs_mnt"
 	}
 
 	rmdir "$boot_mnt" || {
+		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to delete temporary mount for boot partition.\033[0m\n"
 		bug_report "Step: unmount_and_cleanup_boot" "Return code: $ret" "Boot mnt: $boot_mnt" "Root mnt: $rootfs_mnt"
 	}
 
 	umount "$rootfs_mnt" || {
+		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to unmount rootfs.\033[0m\n"
 		bug_report "Step: unmount_and_cleanup_root" "Return code: $ret" "Boot mnt: $boot_mnt" "Root mnt: $rootfs_mnt"
 	}
 
 	rmdir "$rootfs_mnt" || {
+		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to delete temporary mount for rootfs.\033[0m\n"
 		bug_report "Step: unmount_and_cleanup_root" "Return code: $ret" "Boot mnt: $boot_mnt" "Root mnt: $rootfs_mnt"
 	}
