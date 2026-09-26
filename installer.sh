@@ -16,6 +16,7 @@ rootfs_blkdev=""
 rootfs_mnt=""
 all_bdevs=""
 separate_sd_and_rootfs=""
+boot_needs_format=false
 
 
 selection=""
@@ -233,48 +234,25 @@ validate_part_selection() {
 		return 1
 	fi
 
-	# is vfat?
-	(
-		fstype=$(blkid -s TYPE -o value "/dev/$selection" 2>/dev/null || true)
-		if [ "$fstype" != "$correct_type" ]; then
-			printf '\033[1;33mWe must \033[31mFORMAT\033[33m this partition in order to make it usable for a %s partition.\n' "$name2"
-			printf "Are you \033[31mSURE\033[33m that you want to \033[31mFORMAT\033[33m this partition, and lose \033[31mALL DATA\033[33m on it?\033[0m [y/N] "
+	# Warn before erasing. The root partition is always reformatted, so it must
+	# always warn even when it is already ext4 (the case most likely to hold
+	# real data). The boot partition is only reformatted when its type does not
+	# already match, so it only warns on a mismatch.
+	fstype=$(blkid -s TYPE -o value "/dev/$selection" 2>/dev/null || true)
+	if [ "$1" = "root" ] || [ "$fstype" != "$correct_type" ]; then
+		printf '\033[1;33mThis partition will be formatted as %s (%s).\n' "$name2" "$correct_type"
+		printf "All existing data on it will be \033[31mERASED\033[33m during installation.\n"
+		printf "Do you want to continue?\033[0m [y/N] "
 
-			read -r yesno || input_closed
-			case $yesno in
-				y|Y|yes|YES)
-					if [ "$1" = "root" ]; then
-						mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "/dev/$selection"
-					elif [ "$1" = "boot" ]; then
-						mkfs.vfat -F 32 "/dev/$selection"
-					fi
-					ret="$?"
-
-					if [ "$ret" != "0" ]; then
-						printf '\033[1;31mFATAL ERROR - Failed to format %s partition!\033[0m\n' "$name2"
-						bug_report "Step: format_part" "Return code: $ret"
-					fi
-
-					printf "\033[32mPartition formatted!\033[0m\n"
-					;;
-				n|N|no|NO)   return 2 ;;
-				*)           return 3 ;;
-			esac
-		fi
-	)
-
-	ret="$?"
-	if [ "$ret" = "0" ]; then
-		return 0
-	elif [ "$ret" = "1" ]; then
-		# failed format
-		exit 1
-	elif [ "$ret" = "3" ] || [ "$ret" = "2" ]; then
-		# invalid option / not confirmed
-		return 1
-	else
-		# ???
-		bug_report "Step: validate_$1" "Return code: $ret"
+		read -r yesno || input_closed
+		case $yesno in
+			y|Y|yes|YES)
+				[ "$1" = "boot" ] && boot_needs_format=true
+				return 0
+				;;
+			n|N|no|NO|"") return 2 ;;
+			*)             return 3 ;;
+		esac
 	fi
 }
 
@@ -295,8 +273,9 @@ validate_and_select_part() {
 			case "$_rc" in
 				1) printf "\033[1;31mInvalid option, please try again\033[0m\n"; continue ;;
 				2) printf "\033[1;31mNot confirmed.\033[0m\n"; continue ;;
+				3) printf "\033[1;31mInvalid answer, please try again\033[0m\n"; continue ;;
 				*)
-					printf "\033[1;31mInternal error.  Please report the following info.\033[0m\n";
+					printf "\033[1;31mInternal error.  Please report the following info.\033[0m\n"
 					bug_report "Step: validate_part" "Return code: $_rc" ;;
 			esac
 		}
@@ -495,15 +474,79 @@ manual_install() {
 	validate_and_select_part "$rootfs_blkdev" "root"
 	rootfs_blkdev="/dev/$selection"
 
-	install_boot
+	if [ "$boot_blkdev" = "$rootfs_blkdev" ]; then
+		printf "\033[1;31mError: Boot and root must be different partitions!\033[0m\n"
+		exit 1
+	fi
 
-	printf 'Wiping rootfs...\n'
+	echo
+	printf "\033[1;33m============================================================\033[0m\n"
+	printf "\033[1;32m                      Ready to Install\033[0m\n"
+	printf "\033[1;33m============================================================\033[0m\n"
+	echo
 
-	wipefs -a "$rootfs_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
-		ret="$?"
+	# Get sizes for confirmation display
+	boot_name=$(basename "$boot_blkdev")
+	boot_size=$(cat "/sys/class/block/$boot_name/size" 2>/dev/null || printf '0')
+	boot_size=$(( boot_size / 2 ))
+	boot_size=$(formatSize "$boot_size")
+
+	root_name=$(basename "$rootfs_blkdev")
+	root_size=$(cat "/sys/class/block/$root_name/size" 2>/dev/null || printf '0')
+	root_size=$(( root_size / 2 ))
+	root_size=$(formatSize "$root_size")
+
+	printf 'Boot partition: \033[1;36m%s\033[0m (%s)\n' "$boot_blkdev" "$boot_size"
+	printf 'Root partition: \033[1;36m%s\033[0m (%s)\n' "$rootfs_blkdev" "$root_size"
+	echo
+	printf "\033[1;33mThe installer will now:\033[0m\n"
+	printf '  1. Format %s as FAT32 (if needed)\n' "$boot_blkdev"
+	printf '  2. Format %s as ext4\n' "$rootfs_blkdev"
+	printf "  3. Download and install Wii Linux ArchPOWER\n"
+	echo
+	printf "\033[1;31m!! Data on these partitions will be lost !!\033[0m\n"
+	echo
+	printf "Continue? [yes/NO] "
+	read -r final_confirm || input_closed
+
+	case "$final_confirm" in
+		yes|YES)
+			printf 'Proceeding with installation...\n'
+			;;
+		*)
+			printf "\033[1;33mInstallation cancelled.\033[0m\n"
+			exit 0
+			;;
+	esac
+
+	# Unmount selected partitions if the host OS has auto-mounted them
+	printf 'Unmounting selected partitions...\n'
+	for _dev in "$boot_blkdev" "$rootfs_blkdev"; do
+		if grep -q "^$_dev " /proc/mounts; then
+			umount "$_dev" || {
+				printf "\033[1;31mFATAL ERROR: Failed to unmount %s\033[0m\n" "$_dev" >&2
+				exit 1
+			}
+		fi
+	done
+
+	printf 'Formatting...\n'
+
+	# Format boot if it wasn't already the correct type, always format rootfs
+	if [ "$boot_needs_format" = "true" ]; then
+		{ wipefs -a "$boot_blkdev" && mkfs.vfat -F 32 "$boot_blkdev"; } || {
+			ret=$?
+			printf "\033[1;31mFailed to format boot partition!\033[0m\n"
+			bug_report "Step: boot_format" "Return code: $ret" "Boot blkdev: $boot_blkdev"
+		}
+	fi
+	{ wipefs -a "$rootfs_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev"; } || {
+		ret=$?
 		printf "\033[1;31mFailed to format rootfs!\033[0m\n"
 		bug_report "Step: rootfs_format" "Return code: $ret" "Root blkdev: $rootfs_blkdev"
 	}
+
+	install_boot
 	install_root
 
 	do_configure
