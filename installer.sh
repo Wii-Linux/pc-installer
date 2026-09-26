@@ -96,6 +96,47 @@ user_quit() {
 	exit 0
 }
 
+check_dependencies() {
+	missing_deps=""
+
+	for cmd in awk basename blkid cat chmod chown cp dirname find grep head \
+		ln mkdir mkfs.ext4 mkfs.vfat mktemp mount mountpoint mv readlink rm \
+		rmdir sed sfdisk sleep sort sync tar tr umount wget wipefs; do
+		if ! command -v "$cmd" >/dev/null 2>&1; then
+			missing_deps="$missing_deps $cmd"
+		fi
+	done
+
+	if [ -n "$missing_deps" ]; then
+		printf '\033[1;31mERROR: Missing required commands:%s\033[0m\n' "$missing_deps"
+		printf "\nPlease install the following packages:\n"
+		printf "  Debian/Ubuntu: apt install util-linux fdisk e2fsprogs dosfstools wget tar\n"
+		printf "  Fedora/RHEL:   dnf install util-linux e2fsprogs dosfstools wget tar\n"
+		printf "  Arch:          pacman -S util-linux e2fsprogs dosfstools wget tar\n"
+		printf "  Gentoo:        emerge sys-apps/util-linux sys-fs/e2fsprogs sys-fs/dosfstools net-misc/wget app-arch/tar\n"
+		exit 1
+	fi
+
+	# The rootfs needs --acls, --xattrs, --numeric-owner and --sparse, which
+	# only GNU tar supports
+	if ! tar --version 2>/dev/null | grep -q "GNU tar"; then
+		printf "\033[1;31mERROR: 'tar' was found, but it is not GNU tar.\033[0m\n"
+		printf "This installer requires GNU tar for ACL, xattr and sparse file support.\n"
+		printf "Please install GNU tar using your distribution's package manager.\n"
+		exit 1
+	fi
+
+	# Optional, but the installer works better with them
+	for cmd in partprobe timeout; do
+		if ! command -v "$cmd" >/dev/null 2>&1; then
+			printf '\033[1;33mWarning: %s not found (recommended but optional)\033[0m\n' "$cmd"
+		fi
+	done
+	if ! command -v udevadm >/dev/null 2>&1 && ! command -v mdev >/dev/null 2>&1; then
+		printf '\033[1;33mWarning: neither udevadm nor mdev found (recommended but optional)\033[0m\n'
+	fi
+}
+
 rescan_bdevs() {
 	all_bdevs=$(find /sys/block/ -mindepth 1 -maxdepth 1 \
 		! -name "loop*" ! -name "sr*" ! -name "ram*" ! -name "zram*" \
@@ -1096,6 +1137,8 @@ EOF
 # ====
 # Start of the actual installer process
 # ====
+check_dependencies
+
 if ! command -v pv >/dev/null 2>&1; then
 	printf "\033[1;33mNote: Install 'pv' for progress bars during extraction\033[0m\n"
 	printf "  (This is optional, installation will work without it)\n"
