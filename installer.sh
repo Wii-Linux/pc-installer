@@ -313,6 +313,16 @@ mount_in_tmpdir_or_die() {
 	printf '%s\n' "$tmp"
 }
 
+# Portable udev settle: tries udevadm first, falls back to mdev on systems
+# that use it instead. Callers should still follow up with a sleep if needed.
+settle_udev() {
+	if command -v udevadm >/dev/null 2>&1; then
+		udevadm settle --timeout=10 2>/dev/null || true
+	elif command -v mdev >/dev/null 2>&1; then
+		mdev -s 2>/dev/null || true
+	fi
+}
+
 
 
 install_boot() {
@@ -453,50 +463,62 @@ automatic_install() {
 		read -r fatSz || input_closed
 		case "$fatSz" in
 			*[!0-9]*) printf "\033[1;31mInvalid input!  Please type a number.\033[0m\n"; continue ;;
-			'') fatSize="+256M" ;;
+			'') fatSize="256" ;;
 			*)
 				# valid number
-				fatSize="+${fatSz}M"
+				fatSize="$fatSz"
 		esac
 		unset fatSz
 		break
 	done
 
 	printf 'Repartitioning...\n'
-	cat << EOF | fdisk "/dev/$sd_blkdev" > /dev/null
-o
-n
-p
-1
 
-$fatSize
-n
-p
-2
+	# Calculate partition sizes in sectors
+	fat_sectors=$((fatSize * 2048))
 
-
-w
+	cat << EOF | sfdisk "/dev/$sd_blkdev" || { printf "\033[1;31mFATAL ERROR: Failed to partition disk\033[0m\n" >&2; exit 1; }
+label: dos
+start=2048, size=$fat_sectors, type=c, bootable
+type=83
 EOF
 
-	# set up a loop device so we get a consistent partition scheme of /dev/loopXp#
-	loopdev="$(losetup --direct-io=on --show -P -f "/dev/$sd_blkdev")" && [ "$loopdev" != "" ] || {
-		ret="$?"
-		printf "\033[1;31mLoop device creation failed!\033[0m\n"
-		bug_report "Step: loopdev_create" "Return code: $ret"
-	}
+	printf 'Synchronizing partition table with kernel...\n'
+	partprobe "/dev/$sd_blkdev" 2>/dev/null || true
+	settle_udev
 
-	printf 'Giving the kernel a few seconds to populate the partition table\n'
-	sync
-	sleep 3
+	# Derive partition names: devices ending in a digit (e.g. mmcblk0, nvme0n1)
+	# use a 'p' separator (mmcblk0p1), others just append the number (sda1)
+	case "$sd_blkdev" in
+		*[0-9])
+			boot_blkdev="/dev/${sd_blkdev}p1"
+			rootfs_blkdev="/dev/${sd_blkdev}p2"
+			;;
+		*)
+			boot_blkdev="/dev/${sd_blkdev}1"
+			rootfs_blkdev="/dev/${sd_blkdev}2"
+			;;
+	esac
 
-	boot_blkdev="${loopdev}p1"
-	rootfs_blkdev="${loopdev}p2"
+	# Wait for partition device nodes to appear; slow SD cards and USB
+	# adapters can take a moment after partprobe and device settle.
+	printf 'Waiting for partitions to initialize...\n'
+	_wait=0
+	while [ "$_wait" -lt 10 ]; do
+		[ -b "$boot_blkdev" ] && [ -b "$rootfs_blkdev" ] && break
+		sleep 1
+		_wait=$((_wait + 1))
+	done
+	if [ ! -b "$boot_blkdev" ] || [ ! -b "$rootfs_blkdev" ]; then
+		printf "\033[1;31mFATAL ERROR: Partition device nodes did not appear after partitioning.\033[0m\n" >&2
+		exit 1
+	fi
 
 	printf 'Formatting...\n'
 	mkfs.vfat -F 32 "$boot_blkdev" && mkfs.ext4 -O '^encrypt' -O '^verity' -O '^metadata_csum_seed' -L 'arch' "$rootfs_blkdev" || {
 		ret="$?"
-		printf "\033[1;31mFailed to format loopdev!\033[0m\n"
-		bug_report "Step: loopdev_format" "Return code: $ret" "Boot blkdev: $boot_blkdev" "Root blkdev: $rootfs_blkdev"
+		printf "\033[1;31mFailed to format partitions!\033[0m\n"
+		bug_report "Step: auto_format" "Return code: $ret" "Boot blkdev: $boot_blkdev" "Root blkdev: $rootfs_blkdev"
 	}
 
 	install_boot
@@ -505,7 +527,6 @@ EOF
 	do_configure
 
 	unmount_and_cleanup
-	losetup -d "$loopdev"
 }
 # ====
 # Start of the actual installer process
