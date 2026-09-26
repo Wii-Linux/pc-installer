@@ -1,8 +1,9 @@
 #!/bin/sh
 set -e
-product="\033[33mWii Linux \033[1;36mArchPOWER\033[0m PC Installer"
+product=$(printf '\033[33mWii Linux \033[1;36mArchPOWER\033[0m PC Installer')
+product_plain="Wii Linux ArchPOWER PC Installer"
 version="0.0.6"
-printf "$product v$version\n"
+printf "%s v%s\n" "$product" "$version"
 
 if [ "$(id -u)" != "0" ]; then
 	printf "\033[1;31mThis installer must be run as root!\033[0m\n"
@@ -23,10 +24,10 @@ selection_info=""
 bug_report() {
 	exec >&2
 	echo "Please attach everything below this line!"
-	printf "=== $product - BUG REPORT ===\n"
+	printf "=== %s - BUG REPORT ===\n" "$product_plain"
 	echo "VERSION: $version"
 	for arg in "$@"; do
-		printf "$arg\n"
+		printf '%s\n' "$arg"
 	done
 	echo "=== END OF BUG REPORT ==="
 	echo "Now exiting.  Please attach the following bug report and submit a GitHub issue."
@@ -144,7 +145,7 @@ validate_part_selection() {
 
 	# size >=256M for boot or >=2GB for root?
 	if [ "$selection_info" -lt "$size" ]; then
-		printf "\033[1;31mThis partition is not large enough to hold the $name!\nIt should be $size_readable or larger.\033[0m\n"
+		printf '\033[1;31mThis partition is not large enough to hold the %s!\nIt should be %s or larger.\033[0m\n' "$name" "$size_readable"
 		return 1
 	fi
 
@@ -152,7 +153,7 @@ validate_part_selection() {
 	(
 		eval "$(blkid --output=export "/dev/$selection")"
 		if [ "$TYPE" != "$correct_type" ]; then
-			printf "\033[1;33mWe must \033[31mFORMAT\033[33m this partition in order to make it usable for a $name2 partition.\n"
+			printf '\033[1;33mWe must \033[31mFORMAT\033[33m this partition in order to make it usable for a %s partition.\n' "$name2"
 			printf "Are you \033[31mSURE\033[33m that you want to \033[31mFORMAT\033[33m this partition, and lose \033[31mALL DATA\033[33m on it?\033[0m [y/N] "
 
 			read -r yesno
@@ -166,7 +167,7 @@ validate_part_selection() {
 					ret="$?"
 
 					if [ "$ret" != "0" ]; then
-						printf "\033[1;31mFATAL ERROR - Failed to format $name2 partition!\033[0m\n"
+						printf '\033[1;31mFATAL ERROR - Failed to format %s partition!\033[0m\n' "$name2"
 						bug_report "Step: format_part" "Return code: $?"
 					fi
 
@@ -250,7 +251,7 @@ clean_disk() {
 			ret="$?"
 
 			if [ "$ret" != "0" ]; then
-				printf "\033[1;31mFATAL ERROR: Failed to unmount /dev/$dev\033[0m\n"
+				printf '\033[1;31mFATAL ERROR: Failed to unmount /dev/%s\033[0m\n' "$dev"
 				bug_report "Step: auto_install_unmount" "Return code: $ret"
 			fi
 		fi
@@ -270,7 +271,7 @@ mount_in_tmpdir_or_die() {
 
 	mount "$1" "$tmp" || {
 		ret="$?"
-		printf "\033[1;31mFATAL ERROR: Failed to mount $1\033[0m\n"
+		printf '\033[1;31mFATAL ERROR: Failed to mount %s\033[0m\n' "$1"
 		[ -d "$tmp" ] && rmdir "$tmp" || true
 
 		bug_report "Step: mount_in_tmpdir__do_mnt" "Return code: $ret" "To be mounted: $1" "TempDir: $tmp"
