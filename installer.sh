@@ -34,6 +34,15 @@ bug_report() {
 	exit 1
 }
 
+# Called as 'read -r var || input_closed'.  On end of input (Ctrl+D or a
+# closed stdin), read fails: under set -e that would kill the script with no
+# explanation, and ignoring it would make menu loops spin forever on empty
+# input, so exit cleanly instead.
+input_closed() {
+	printf '\n\033[1;33mNo input received; installation cancelled.\033[0m\n'
+	exit 1
+}
+
 rescan_bdevs() {
 	all_bdevs=$(find /sys/block/ -mindepth 1 -maxdepth 1 \
 		! -name "loop*" ! -name "sr*" ! -name "ram*" ! -name "zram*" \
@@ -70,7 +79,7 @@ select_disk() {
 
 	echo
 	printf "Select a disk: "
-	read -r devnum
+	read -r devnum || input_closed
 
 	for dev in $all_bdevs; do
 		if [ "$i" = "$devnum" ]; then
@@ -104,7 +113,7 @@ select_part() {
 
 	echo
 	printf "Select a partition: "
-	read -r partnum
+	read -r partnum || input_closed
 
 	for part in $all_parts; do
 		if [ "$i" = "$partnum" ]; then
@@ -157,7 +166,7 @@ validate_part_selection() {
 			printf '\033[1;33mWe must \033[31mFORMAT\033[33m this partition in order to make it usable for a %s partition.\n' "$name2"
 			printf "Are you \033[31mSURE\033[33m that you want to \033[31mFORMAT\033[33m this partition, and lose \033[31mALL DATA\033[33m on it?\033[0m [y/N] "
 
-			read -r yesno
+			read -r yesno || input_closed
 			case $yesno in
 				y|Y|yes|YES)
 					if [ "$1" = "root" ]; then
@@ -228,7 +237,7 @@ select_root_disk() {
 		printf "\033[33mYou can store \033[32mthe rootfs\033[33m (the actual system files and user data) on a different device.\n"
 		printf "This, however, is highly experimental, and will disable the auto-partitioning feature of this script.\n"
 		printf "Would you like to store the boot files and rootfs on separate devices?\033[0m [y/N] "
-		read -r yesno
+		read -r yesno || input_closed
 		case "$yesno" in
 			y|Y|yes|YES) separate_sd_and_rootfs=true; break ;;
 			n|N|no|NO|"") separate_sd_and_rootfs=false; break ;;
@@ -320,7 +329,7 @@ do_configure() {
 		# discard any double-enter taps or similar
 		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null || true
 		printf "\033[33mWould you like to copy NetworkManager profiles from your host system?\033[0m [Y/n] "
-		read -r yesno
+		read -r yesno || input_closed
 		case "$yesno" in
 			y|Y|yes|YES|"") copy_nm=true ;;
 			n|N|no|NO) copy_nm=false ;;
@@ -340,7 +349,7 @@ do_configure() {
 		# discard any double-enter taps or similar
 		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null || true
 		printf "\033[33mWould you like to enable the SSH daemon to start automatically for remote login?\033[0m [Y/n] "
-		read -r yesno
+		read -r yesno || input_closed
 		case "$yesno" in
 			y|Y|yes|YES|"") ssh=true ;;
 			n|N|no|NO) ssh=false ;;
@@ -419,7 +428,7 @@ automatic_install() {
 	fatSize=""
 	while true; do
 		printf "\033[33mHow many MB of space would you like to reserve for the \033[32mFAT32 Boot files / Homebrew partition\033[33m?\033[0m [default:256] "
-		read -r fatSz
+		read -r fatSz || input_closed
 		case "$fatSz" in
 			*[!0-9]*) printf "\033[1;31mInvalid input!  Please type a number.\033[0m\n"; continue ;;
 			'') fatSize="+256M" ;;
@@ -494,7 +503,7 @@ select_root_disk
 if [ "$separate_sd_and_rootfs" = "false" ]; then
 	while true; do
 		printf "\033[33mWould you like \033[32m[A]utomatic\033[33m or \033[32m[M]anual\033[33m install?\033[0m "
-		read -r doauto
+		read -r doauto || input_closed
 		case "$doauto" in
 			a|A|auto|Auto|AUTO|automatic|Automatic|AUTOMATIC) automatic_install ;;
 			m|M|man|Man|MAN|manual|Manual|MANUAL) manual_install ;;
