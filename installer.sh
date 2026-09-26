@@ -139,7 +139,7 @@ validate_part_selection() {
 		name2="boot"
 		correct_type="vfat"
 	else
-		printf "\033[1;31mInternal error - parameter 1 not boot or root"
+		printf "\033[1;31mInternal error - parameter 1 not boot or root\033[0m\n"
 		bug_report "Step: validate_part" "Param1: $1"
 	fi
 
@@ -356,7 +356,7 @@ do_configure() {
 }
 
 unmount_and_cleanup() {
-	printf "\033[32mSuccess!  Now syncing to disk and cleaning up, please wait...\n"
+	printf "\033[32mSuccess!  Now syncing to disk and cleaning up, please wait...\033[0m\n"
 	umount "$boot_mnt" || {
 		ret=$?
 		printf "\033[1;31mFATAL ERROR: Failed to unmount boot partition.\033[0m\n"
