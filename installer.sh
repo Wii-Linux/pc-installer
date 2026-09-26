@@ -425,6 +425,16 @@ settle_udev() {
 	fi
 }
 
+# Discard any buffered input (e.g. an accidental double Enter) so the next
+# prompt starts clean.  Only done for a terminal: with piped or redirected
+# input it would swallow the answers meant for the following prompts.
+# Skipped silently if timeout isn't available.
+drain_stdin() {
+	if [ -t 0 ] && command -v timeout >/dev/null 2>&1; then
+		timeout 0.1 dd of=/dev/null bs=1 count=10000 2>/dev/null || true
+	fi
+}
+
 # Suspend udisks2 while we repartition and format, so the desktop doesn't
 # auto-mount or probe the partitions mid-operation.  udisks2 is D-Bus
 # activated, so a plain stop would be undone by the next desktop request;
@@ -699,7 +709,7 @@ do_configure() {
 
 	while true; do
 		# discard any double-enter taps or similar
-		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null || true
+		drain_stdin
 		printf "\033[33mWould you like to copy NetworkManager profiles from your host system?\033[0m [Y/n] "
 		read -r yesno || input_closed
 		case "$yesno" in
@@ -711,15 +721,21 @@ do_configure() {
 	done
 
 	if [ "$copy_nm" = "true" ]; then
+		# Profiles hold Wi-Fi passwords, so keep the directory root-only; cp -a
+		# keeps each profile's own root-only permissions.  Copying "dir/." instead
+		# of "dir/*" includes hidden files and can't fail on an empty directory.
 		if [ -d /etc/NetworkManager/system-connections ] &&
-		! [ -z "$(ls -A /etc/NetworkManager/system-connections)" ]; then
-			cp -a /etc/NetworkManager/system-connections/* "$rootfs_mnt/etc/NetworkManager/system-connections/"
+		find /etc/NetworkManager/system-connections -mindepth 1 -maxdepth 1 \
+			-print -quit 2>/dev/null | grep -q .; then
+			mkdir -p "$rootfs_mnt/etc/NetworkManager/system-connections/"
+			chmod 700 "$rootfs_mnt/etc/NetworkManager/system-connections/"
+			cp -a /etc/NetworkManager/system-connections/. "$rootfs_mnt/etc/NetworkManager/system-connections/"
 		fi
 	fi
 
 	while true; do
 		# discard any double-enter taps or similar
-		timeout 0.1 dd if=/dev/stdin bs=1 count=10000 of=/dev/null 2>/dev/null || true
+		drain_stdin
 		printf "\033[33mWould you like to enable the SSH daemon to start automatically for remote login?\033[0m [Y/n] "
 		read -r yesno || input_closed
 		case "$yesno" in
@@ -731,6 +747,7 @@ do_configure() {
 	done
 
 	if [ "$ssh" = "true" ]; then
+		mkdir -p "$rootfs_mnt/etc/systemd/system/multi-user.target.wants/"
 		ln -sf "/usr/lib/systemd/system/sshd.service" "$rootfs_mnt/etc/systemd/system/multi-user.target.wants/sshd.service"
 	fi
 
