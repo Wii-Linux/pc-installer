@@ -741,6 +741,8 @@ install_boot() {
 		printf "\033[1;31mFATAL ERROR: Failed to extract boot files!\033[0m\n"
 		bug_report "Step: install_boot_extract" "Return code: $ret"
 	}
+
+	printf "\033[32mBoot files installed!\033[0m\n"
 }
 
 install_root() {
@@ -754,6 +756,8 @@ install_root() {
 		printf "\033[1;31mFATAL ERROR: Failed to extract rootfs!\033[0m\n"
 		bug_report "Step: install_root_extract" "Return code: $ret"
 	}
+
+	printf "\033[32mRootfs installed!\033[0m\n"
 }
 
 
